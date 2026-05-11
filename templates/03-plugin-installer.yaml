@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Install Grafana plugins
+
+Parameters:
+
+  WorkspaceId:
+    Type: String
+
+  LambdaS3Bucket:
+    Type: String
+
+  LambdaS3Key:
+    Type: String
+
+Resources:
+
+  PluginInstallerRole:
+    Type: AWS::IAM::Role
+    Properties:
+
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+      Policies:
+        - PolicyName: grafana-plugin-policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - grafana:DescribeWorkspace
+                  - grafana:UpdateWorkspaceConfiguration
+                Resource: "*"
+
+  PluginInstallerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: grafana-plugin-installer
+      Runtime: python3.11
+      Handler: index.handler
+      Timeout: 300
+      Role: !GetAtt PluginInstallerRole.Arn
+
+      Code:
+        S3Bucket: !Ref LambdaS3Bucket
+        S3Key: !Ref LambdaS3Key
+
+  PluginInstaller:
+    Type: Custom::GrafanaPluginInstaller
+    Properties:
+      ServiceToken: !GetAtt PluginInstallerFunction.Arn
+      WorkspaceId: !Ref WorkspaceId
+
+      Plugins:
+        - grafana-piechart-panel
+        - grafana-clock-panel
+        - grafana-worldmap-panel

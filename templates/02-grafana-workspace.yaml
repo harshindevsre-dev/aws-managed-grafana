@@ -1,0 +1,69 @@
+##AWSTemplateFormatVersion: '2010-09-09'
+##Description: AWS Managed Grafana Workspace
+
+##Parameters:
+
+  ##GrafanaRoleArn:
+    ##Type: String
+
+##Resources:
+
+  ##GrafanaWorkspace:
+    ##Type: AWS::Grafana::Workspace
+   ## Properties:
+     ## Name: enterprise-grafana
+      ##AccountAccessType: CURRENT_ACCOUNT
+      ##AuthenticationProviders:
+        ##- AWS_SSO
+     ## PermissionType: CUSTOMER_MANAGED
+     ## RoleArn: !Ref GrafanaRoleArn
+     ## DataSources:
+        ##- CLOUDWATCH
+
+##Outputs:
+
+  ##WorkspaceId:
+    ##Value: !Ref GrafanaWorkspace
+
+  ##WorkspaceEndpoint:
+    ##Value: !GetAtt GrafanaWorkspace.Endpoint
+
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS Managed Grafana Workspace
+
+Parameters:
+
+  GrafanaRoleArn:
+    Type: String
+
+Resources:
+
+  GrafanaWorkspace:
+    Type: AWS::Grafana::Workspace
+    Properties:
+      Name: enterprise-grafana
+
+      AccountAccessType: CURRENT_ACCOUNT
+
+      AuthenticationProviders:
+        - AWS_SSO
+
+      PermissionType: CUSTOMER_MANAGED
+
+      RoleArn: !Ref GrafanaRoleArn
+
+      DataSources:
+        - CLOUDWATCH
+        - PROMETHEUS
+
+      NotificationDestinations:
+        - SNS
+
+Outputs:
+
+  WorkspaceId:
+    Value: !Ref GrafanaWorkspace
+
+  WorkspaceEndpoint:
+    Value: !GetAtt GrafanaWorkspace.Endpoint
