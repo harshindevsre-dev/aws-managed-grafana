@@ -1,44 +1,43 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "🚀 Deploying Grafana Dashboards via SSM..."
+echo "Starting Grafana dashboard deployment via SSM..."
 
-: "${EC2_INSTANCE_ID:?EC2_INSTANCE_ID not set}"
-: "${GRAFANA_API_KEY:?GRAFANA_API_KEY not set}"
+: "${EC2_INSTANCE_ID:?EC2_INSTANCE_ID is required}"
+: "${GRAFANA_API_KEY:?GRAFANA_API_KEY is required}"
 
-for file in dashboards/*.json
-do
-  echo "📤 Processing $file"
+for file in dashboards/*.json; do
+  echo "Uploading dashboard: $file"
 
-  payload=$(jq -c \
+  dashboard_payload=$(jq -c \
     --argjson dashboard "$(cat "$file")" \
     '{dashboard: $dashboard, overwrite: true, folderId: 0}')
 
-  COMMAND_ID=$(aws ssm send-command \
+  command_id=$(aws ssm send-command \
     --instance-ids "$EC2_INSTANCE_ID" \
     --document-name "AWS-RunShellScript" \
-    --parameters commands="[\
-      \"curl -sf -X POST http://localhost:3000/api/dashboards/db \
+    --parameters commands="[
+      \"curl -s -X POST http://localhost:3000/api/dashboards/db \
         -H 'Authorization: Bearer $GRAFANA_API_KEY' \
         -H 'Content-Type: application/json' \
-        -d '$payload'\"
+        -d '$dashboard_payload'\"
     ]" \
     --query 'Command.CommandId' \
     --output text)
 
-  echo "⏳ Command ID: $COMMAND_ID"
+  echo "Command sent: $command_id"
 
   aws ssm wait command-executed \
-    --command-id "$COMMAND_ID" \
+    --command-id "$command_id" \
     --instance-id "$EC2_INSTANCE_ID"
 
   aws ssm get-command-invocation \
-    --command-id "$COMMAND_ID" \
+    --command-id "$command_id" \
     --instance-id "$EC2_INSTANCE_ID" \
     --query '[Status,StandardOutputContent,StandardErrorContent]' \
     --output text
 
-  echo "✅ Done: $file"
+  echo "Completed: $file"
 done
 
-echo "🎉 Deployment completed"
+echo "Dashboard deployment finished."
