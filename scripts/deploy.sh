@@ -1,44 +1,38 @@
-#!/bin/bash
-set -euo pipefail
+name: Deploy Grafana Dashboards
 
-echo "🚀 Deploying Grafana Dashboards via SSM..."
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "dashboards/**"
+  workflow_dispatch:
 
-: "${EC2_INSTANCE_ID:?EC2_INSTANCE_ID not set}"
-: "${GRAFANA_API_KEY:?GRAFANA_API_KEY not set}"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-for file in dashboards/*.json
-do
-  echo "📤 Processing $file"
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-  payload=$(jq -c \
-    --argjson dashboard "$(cat "$file")" \
-    '{dashboard: $dashboard, overwrite: true, folderId: 0}')
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq awscli
 
-  COMMAND_ID=$(aws ssm send-command \
-    --instance-ids "$EC2_INSTANCE_ID" \
-    --document-name "AWS-RunShellScript" \
-    --parameters commands="[
-      \"curl -sf -X POST http://localhost:3000/api/dashboards/db \
-        -H 'Authorization: Bearer $GRAFANA_API_KEY' \
-        -H 'Content-Type: application/json' \
-        -d '$payload'\"
-    ]" \
-    --query 'Command.CommandId' \
-    --output text)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-  echo "⏳ Command ID: $COMMAND_ID"
+      - name: Make deploy script executable
+        run: chmod +x deploy.sh
 
-  aws ssm wait command-executed \
-    --command-id "$COMMAND_ID" \
-    --instance-id "$EC2_INSTANCE_ID"
-
-  aws ssm get-command-invocation \
-    --command-id "$COMMAND_ID" \
-    --instance-id "$EC2_INSTANCE_ID" \
-    --query '[Status,StandardOutputContent,StandardErrorContent]' \
-    --output text
-
-  echo "✅ Done: $file"
-done
-
-echo "🎉 Deployment completed"
+      - name: Deploy Grafana dashboards via SSM
+        env:
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+        run: ./deploy.sh
