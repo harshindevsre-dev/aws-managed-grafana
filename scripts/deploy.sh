@@ -3,11 +3,29 @@ set -e
 
 echo "🚀 Deploying Grafana Dashboards..."
 
-for file in dashboards/*.json
+# Check if dashboards directory exists
+if [ ! -d "dashboards" ]; then
+  echo "❌ Error: 'dashboards/' directory not found"
+  echo "📁 Current directory contents:"
+  ls -la
+  exit 1
+fi
+
+# Check if any JSON files exist
+shopt -s nullglob
+json_files=(dashboards/*.json)
+
+if [ ${#json_files[@]} -eq 0 ]; then
+  echo "❌ Error: No JSON files found in dashboards/"
+  echo "📁 dashboards/ contents:"
+  ls -la dashboards/
+  exit 1
+fi
+
+for file in "${json_files[@]}"
 do
   echo "📤 Uploading $file"
 
-  # Wrap the dashboard JSON in the required Grafana API payload
   payload=$(jq -n \
     --argjson dashboard "$(cat "$file")" \
     '{dashboard: $dashboard, overwrite: true, folderId: 0}')
