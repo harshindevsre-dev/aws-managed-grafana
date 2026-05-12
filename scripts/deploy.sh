@@ -1,41 +1,44 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-echo "🚀 Deploying Grafana Dashboards..."
+echo "🚀 Deploying Grafana Dashboards via SSM..."
 
-# Check if dashboards directory exists
-if [ ! -d "dashboards" ]; then
-  echo "❌ Error: 'dashboards/' directory not found"
-  echo "📁 Current directory contents:"
-  ls -la
-  exit 1
-fi
+: "${EC2_INSTANCE_ID:?EC2_INSTANCE_ID not set}"
+: "${GRAFANA_API_KEY:?GRAFANA_API_KEY not set}"
 
-# Check if any JSON files exist
-shopt -s nullglob
-json_files=(dashboards/*.json)
-
-if [ ${#json_files[@]} -eq 0 ]; then
-  echo "❌ Error: No JSON files found in dashboards/"
-  echo "📁 dashboards/ contents:"
-  ls -la dashboards/
-  exit 1
-fi
-
-for file in "${json_files[@]}"
+for file in dashboards/*.json
 do
-  echo "📤 Uploading $file"
+  echo "📤 Processing $file"
 
-  payload=$(jq -n \
+  payload=$(jq -c \
     --argjson dashboard "$(cat "$file")" \
     '{dashboard: $dashboard, overwrite: true, folderId: 0}')
 
-  curl -sf -X POST "$GRAFANA_URL/api/dashboards/db" \
-    -H "Authorization: Bearer $GRAFANA_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d "$payload"
+  COMMAND_ID=$(aws ssm send-command \
+    --instance-ids "$EC2_INSTANCE_ID" \
+    --document-name "AWS-RunShellScript" \
+    --parameters commands="[
+      \"curl -sf -X POST http://localhost:3000/api/dashboards/db \
+        -H 'Authorization: Bearer $GRAFANA_API_KEY' \
+        -H 'Content-Type: application/json' \
+        -d '$payload'\"
+    ]" \
+    --query 'Command.CommandId' \
+    --output text)
 
-  echo "✅ Uploaded $file"
+  echo "⏳ Command ID: $COMMAND_ID"
+
+  aws ssm wait command-executed \
+    --command-id "$COMMAND_ID" \
+    --instance-id "$EC2_INSTANCE_ID"
+
+  aws ssm get-command-invocation \
+    --command-id "$COMMAND_ID" \
+    --instance-id "$EC2_INSTANCE_ID" \
+    --query '[Status,StandardOutputContent,StandardErrorContent]' \
+    --output text
+
+  echo "✅ Done: $file"
 done
 
-echo "🎉 All dashboards deployed successfully"
+echo "🎉 Deployment completed"
